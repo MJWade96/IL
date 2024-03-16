@@ -23,7 +23,7 @@ class VMP:
         self.n_samples = 100
         self.kernel_weights = np.zeros(shape=(kernel_num, self.dim))
 
-        self.h_params =None
+        self.h_params = None
         self.y0 = None
         self.g = None
 
@@ -39,7 +39,8 @@ class VMP:
     def __Psi__(self, can_values: np.ndarray):
         """
         compute the contributions of each kernel at each time step as a (T, K) matrix, where
-        can_value is a (T, ) array, the sampled canonical values, where T is the total number of time steps.
+        can_value denotes the sampled canonical values, and is a (T, ) array, where
+        T is the total number of time steps.
         """
         return self.__psi__(can_values[:, None])
 
@@ -48,8 +49,9 @@ class VMP:
         if self.elementary_type == 'linear':
             return np.matmul(self.h_params, np.matrix([[1], [x]]))
         else:
-            return np.matmul(self.h_params, np.matrix(
-                [[1], [x], [np.power(x, 2)], [np.power(x, 3)], [np.power(x, 4)], [np.power(x, 5)]]))
+            return np.matmul(self.h_params, np.matrix([
+                [1], [x], [np.power(x, 2)], [np.power(x, 3)], [np.power(x, 4)], [np.power(x, 5)]
+                ]))
 
 
     def linear_traj(self, can_values: np.ndarray):
@@ -64,60 +66,6 @@ class VMP:
                                        np.power(can_values, 4), np.power(can_values, 5)])
             
         return np.einsum("ij,ik->kj", self.h_params, can_values_aug)  # (n, 2) (T, 2)
-
-    def train(self, trajectories):
-        """
-        Assume trajectories are regularly sampled time-sequences.
-        """
-        if len(trajectories.shape) == 2: # (n, T, 2)
-            trajectories = np.expand_dims(trajectories, 0)
-
-        n_demo, self.n_samples, self.dim = trajectories.shape
-        self.dim -= 1
-
-        can_value_array = self.can_sys(1, 0, self.n_samples)  # canonical variable (T)
-        Psi = self.__Psi__(can_value_array)  # (T, K) squared exponential (SE) kernels
-
-        if self.elementary_type == 'linear':
-            y0 = trajectories[:, 0, 1:].mean(axis=0)
-            g = trajectories[:, -1, 1:].mean(axis=0)
-            self.h_params = np.stack([g, y0-g])
-        else:
-            # min_jerk
-            y0 = trajectories[:, 0:3, 1:].mean(axis=0)
-            dy0 = (y0[1, 2:] - y0[0, 2:]) / (y0[1, 1] - y0[0, 1])
-            dy1 = (y0[2, 2:] - y0[1, 2:]) / (y0[2, 1] - y0[1, 1])
-            ddy0 = (dy1 - dy0) / (y0[1, 1] - y0[0, 1])
-            
-            g = trajectories[:, -2:, 1:].mean(axis=0)
-            dg0 = (g[1, 2:] - g[0, 2:]) / (g[1, 1] - g[0, 1])
-            dg1 = (g[2, 2:] - g[1, 2:]) / (g[2, 1] - g[1, 1])
-            ddg = (dg1 - dg0) / (g[1, 1] - g[0, 1])
-
-            b = np.stack([y0[0, :], dy0, ddy0, 
-                          g[-1, :], dg1, ddg])
-            A = np.array([[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], 
-                          [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 2, 0, 0, 0]])
-            self.h_params = np.linalg.solve(A, b)
-
-        self.y0 = y0
-        self.g = g
-        linear_traj = self.linear_traj(can_value_array)  # (T, dim)  elementary trajectory
-        shape_traj = trajectories[..., 1:] - np.expand_dims(linear_traj, 0)  # (N, T, dim) - (1, T, dim) shape modulation
-
-        pseudo_inv = np.linalg.pinv(Psi.T.dot(Psi), pinv_rcond)  # (K, K)
-        self.kernel_weights = np.einsum("ij,njd->nid", pseudo_inv.dot(Psi.T), shape_traj).mean(axis=0)  #
-        ic(Psi.shape, shape_traj.shape, self.kernel_weights.shape)
-        
-        return linear_traj
-
-
-    def save_weights_to_file(self, filename):
-        np.savetxt(filename, self.kernel_weights, delimiter=',')
-
-
-    def load_weights_from_file(self, filename):
-        self.kernel_weights = np.loadtxt(filename, delimiter=',')
 
 
     def get_weights(self):
@@ -144,12 +92,24 @@ class VMP:
                             f"It should have {self.kernel_num} rows (for kernel number) "
                             f"and {self.dim} columns (for dimensions), but given is {ws.shape}.")
 
+    
+    def save_weights_to_file(self, filename):
+        np.savetxt(filename, self.kernel_weights, delimiter=',')
 
+
+    def load_weights_from_file(self, filename):
+        self.kernel_weights = np.loadtxt(filename, delimiter=',')
+        
+        
     def get_position(self, t):
         x = 1 - t
         return np.matmul(self.__psi__(x), self.kernel_weights)
 
-
+    def get_target(self, t):
+        action = np.transpose(self.h(1-t)) + self.get_position(t)
+        return action
+    
+    
     def set_start(self, y0):
         self.y0 = y0
         self.h_params = np.stack([self.g, self.y0 - self.g])
@@ -161,16 +121,58 @@ class VMP:
 
 
     def set_start_goal(self, y0, g):
-        self.y0 = y0
-        self.g = g
-        self.h_params = np.stack([self.g, self.y0 - self.g])
+        self.set_start(self, y0)
+        self.set_goal(self, g)
 
 
+    def train(self, trajectories):
+         """
+         Assume trajectories are regularly sampled time-sequences.
+         """
+         if len(trajectories.shape) == 2: # (n, T, 2)
+             trajectories = np.expand_dims(trajectories, 0)
+    
+         n_demo, self.n_samples, self.dim = trajectories.shape
+         self.dim -= 1
+    
+         can_value_array = self.can_sys(1, 0, self.n_samples)  # canonical variable (T)
+         Psi = self.__Psi__(can_value_array)  # (T, K) squared exponential (SE) kernels
+    
+         if self.elementary_type == 'linear':
+             y0 = trajectories[:, 0, 1:].mean(axis=0)
+             g = trajectories[:, -1, 1:].mean(axis=0)
+             self.h_params = np.stack([g, y0-g])
+         else:
+             # min_jerk
+             y0 = trajectories[:, 0:3, 1:].mean(axis=0)
+             dy0 = (y0[1, 2:] - y0[0, 2:]) / (y0[1, 1] - y0[0, 1])
+             dy1 = (y0[2, 2:] - y0[1, 2:]) / (y0[2, 1] - y0[1, 1])
+             ddy0 = (dy1 - dy0) / (y0[1, 1] - y0[0, 1])
+             
+             g = trajectories[:, -2:, 1:].mean(axis=0)
+             dg0 = (g[1, 2:] - g[0, 2:]) / (g[1, 1] - g[0, 1])
+             dg1 = (g[2, 2:] - g[1, 2:]) / (g[2, 1] - g[1, 1])
+             ddg = (dg1 - dg0) / (g[1, 1] - g[0, 1])
+    
+             self.h_params = self.get_min_jerk_params(y0, g, dy0, dg1, ddy0, ddg)
+    
+         self.y0 = y0
+         self.g = g
+         linear_traj = self.linear_traj(can_value_array)  # (T, dim)  elementary trajectory
+         shape_traj = trajectories[..., 1:] - np.expand_dims(linear_traj, 0)  # (N, T, dim) - (1, T, dim) shape modulation
+    
+         pseudo_inv = np.linalg.pinv(Psi.T.dot(Psi), pinv_rcond)  # (K, K)
+         self.kernel_weights = np.einsum("ij,njd->nid", pseudo_inv.dot(Psi.T), shape_traj).mean(axis=0)  #
+         ic(Psi.shape, shape_traj.shape, self.kernel_weights.shape)
+         
+         return linear_traj
+ 
+    
     def roll(self, y0, g, n_samples=None):
         """
         reproduce the trajectory given start point y0 (dim, ) and end point g (dim, ), return traj (n_samples, dim)
         """
-        n_samples = self.n_samples if n_samples is None else n_samples
+        n_samples = n_samples or self.n_samples
         can_values = self.can_sys(1, 0, n_samples)  # canonical variable (T)
 
         if self.elementary_type == "minjerk":
@@ -190,10 +192,32 @@ class VMP:
         return np.concatenate([time_stamp, traj], axis=1), linear_traj
 
 
-    def get_target(self, t):
-        action = np.transpose(self.h(1-t)) + self.get_position(t)
-        return action
+def scale_and_reproduce(trajs, vmp_set, via_t, off_set, target_offset):
+    start = trajs[:, 0, 1:4][0]
+    task = trajs[:, -1, 7:10][0] + np.array(target_offset)
+    via_point = [start, off_set[0][0] + task, off_set[1][0] + task]
+    ic(via_point)
 
+    # reproduce
+    scaled_VMP_p003 = trajs[:, 0, 0:4]
+    linear_traj = trajs[:, 0, 1:4]
+    for i in range(len(via_point)-1):
+        temp_reproduced, temp_linear_traj = vmp_set[i].roll(via_point[i], via_point[i+1], via_t[i+1]-via_t[i])
+        ic(temp_reproduced, temp_linear_traj)
+        # planned trajectory is directly used as the base trajectory in transfer phase with index col for alignment
+        if i < 1:
+            temp_reproduced = np.insert(temp_linear_traj, 0, np.linspace(0, 1, temp_linear_traj.shape[0]), axis=1)
+        scaled_VMP_p003 = np.concatenate((scaled_VMP_p003, temp_reproduced), axis=0)
+        linear_traj = np.concatenate((linear_traj, temp_linear_traj), axis=0)
+
+
+# Test 1
+target_offset_1 = [0.03, 0.03, 0]
+scaled_VMP_p003, linear_traj_p003 = scale_and_reproduce(trajs, vmp_set, via_t, off_set, target_offset_1)
+
+# Test 2
+target_offset_2 = [-0.03, -0.03, 0]
+scaled_VMP_n003, linear_traj_n003 = scale_and_reproduce(trajs, vmp_set, via_t, off_set, target_offset_2)
 
     @staticmethod
     def can_sys(t0, t1, n_sample):
@@ -212,10 +236,8 @@ class VMP:
     def get_min_jerk_params(y0, g, dy0, dg, ddy0, ddg):
         b = np.stack([y0, dy0, ddy0, 
                       g, dg, ddg])
-        A = np.array(
-            [[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], 
-             [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 2, 0, 0, 0]]
-            )
+        A = np.array([[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], 
+                      [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 2, 0, 0, 0]])
 
         return np.linalg.solve(A, b)
 
@@ -227,88 +249,28 @@ def transformation_matrix(position, euler_angles):
     translation_matrix[:3, 3] = position
 
     # angle transform matrix
-    roll, pitch, yaw = euler_angles
     rotation_matrix = np.eye(4)
+    yaw, roll, pitch = euler_angles
+    
+    cos_yaw = np.cos(yaw)
+    sin_yaw = np.sin(yaw)
+    cos_roll = np.cos(roll)
+    sin_roll = np.sin(roll)
+    cos_pitch = np.cos(pitch)
+    sin_pitch = np.sin(pitch)
+    
     rotation_matrix[:3, :3] = np.array([
-        [np.cos(yaw)*np.cos(pitch), -np.sin(yaw)*np.cos(roll) + np.cos(yaw)*np.sin(pitch)*np.sin(roll), np.sin(yaw)*np.sin(roll) + np.cos(yaw)*np.sin(pitch)*np.cos(roll)],
-        [np.sin(yaw)*np.cos(pitch), np.cos(yaw)*np.cos(roll) + np.sin(yaw)*np.sin(pitch)*np.sin(roll), -np.cos(yaw)*np.sin(roll) + np.sin(yaw)*np.sin(pitch)*np.cos(roll)],
-        [-np.sin(pitch), np.cos(pitch)*np.sin(roll), np.cos(pitch)*np.cos(roll)]
+        [cos_yaw * cos_pitch, -sin_yaw * cos_roll + cos_yaw * sin_pitch * sin_roll, sin_yaw * sin_roll + cos_yaw * sin_pitch * cos_roll],
+        [sin_yaw * cos_pitch, cos_yaw * cos_roll + sin_yaw * sin_pitch * sin_roll, -cos_yaw * sin_roll + sin_yaw * sin_pitch * cos_roll],
+        [-sin_pitch, cos_pitch * sin_roll, cos_pitch * cos_roll]
     ])
 
     # pose transform matrix
     transformation_matrix = np.dot(translation_matrix, rotation_matrix)
+    
     return transformation_matrix
 
-
-if __name__ == '__main__':
-    ################################ test with real data ############################
-    traj_files = ["./path_point_for_ILRRL1.csv"]
-
-    trajs = np.array([np.loadtxt(f, delimiter=',') for f in traj_files])
-    ic(trajs.shape)
-
-    trajs2 = trajs[:, :98, :]
-    ic(trajs2.shape)
-
-    ######### via-point #########
-    # via-point extraction and task-centric
-    via_t = [0, 23, trajs2[0, :, 1].shape[0]-1]
-    off_set = [trajs[:, via_t[1], 1:4] - trajs[:, via_t[2], 7:10], trajs[:, via_t[2], 1:4] - trajs[:, via_t[2], 7:10]]
-
-    # training
-    vmp_set = []
-    linear_traj_raw = trajs[:, 0, 1:4]
-    for i in range(len(via_t)-1):
-        vmp = VMP(3, kernel_num=int(0.5*via_t[i+1]), elementary_type='linear', use_out_of_range_kernel=False)
-        temp_linear_traj_raw = vmp.train(trajs2[:, via_t[i]:via_t[i+1], 0:4])
-        vmp_set.append(vmp)
-        linear_traj_raw = np.concatenate((linear_traj_raw, temp_linear_traj_raw), axis=0)
-
-
-    ########################### test 1 ###########################
-    # scale to variable position [0.03, 0.03, 0]
-    # via_point modulation
-    start = trajs[:, 0, 1:4][0]
-    task = trajs[:, -1, 7:10][0] + np.array([0.03, 0.03, 0])
-    via_point = [start, off_set[0][0] + task, off_set[1][0] + task]
-    #via_point = [start, trajs2[0, via_point[1], 1:4] + task, trajs2[0, via_point[2], 1:4] + task]
-    ic(via_point)
-
-    # reproduce
-    scaled_VMP_p003 = trajs[:, 0, 0:4]
-    linear_traj = trajs[:, 0, 1:4]
-    for i in range(len(via_point)-1):
-        temp_reproduced, temp_linear_traj = vmp_set[i].roll(via_point[i], via_point[i+1], via_t[i+1]-via_t[i])
-        ic(temp_reproduced, temp_linear_traj)
-        # planned trajectory is directly used as the base trajectory in transfer phase with index col for alignment
-        if i < 1:
-            temp_reproduced = np.insert(temp_linear_traj, 0, np.linspace(0, 1, temp_linear_traj.shape[0]), axis=1)
-        scaled_VMP_p003 = np.concatenate((scaled_VMP_p003, temp_reproduced), axis=0)
-        linear_traj = np.concatenate((linear_traj, temp_linear_traj), axis=0)
-
-
-    ########################### test 2 ###########################
-    # scale to variable position [-0.03, -0.03, 0]
-    # via_point modulation
-    start = trajs[:, 0, 1:4][0]
-    task = trajs[:, -1, 7:10][0] + np.array([-0.03, -0.03, 0])
-    via_point = [start, off_set[0][0] + task, off_set[1][0] + task]
-    # via_point = [start, trajs2[0, via_point[1], 1:4] + task, trajs2[0, via_point[2], 1:4] + task]
-    ic(via_point)
-
-    # reproduce
-    scaled_VMP_n003 = trajs[:, 0, 0:4]
-    linear_traj = trajs[:, 0, 1:4]
-    for i in range(len(via_point) - 1):
-        temp_reproduced, temp_linear_traj = vmp_set[i].roll(via_point[i], via_point[i + 1], via_t[i+1]-via_t[i])
-        # planned trajectory is directly used as the base trajectory in transfer phase with index col for alignment
-        if i < 1:
-            temp_reproduced = np.insert(temp_linear_traj, 0, np.linspace(0, 1, temp_linear_traj.shape[0]), axis=1)
-        scaled_VMP_n003 = np.concatenate((scaled_VMP_n003, temp_reproduced), axis=0)
-        linear_traj = np.concatenate((linear_traj, temp_linear_traj), axis=0)
-
-    ic(reproduced.shape)
-    
+def draw(linear_traj, trajs, trajs2):
     fig = plt.figure(dpi=300)
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.6)
@@ -335,9 +297,48 @@ if __name__ == '__main__':
     ax2.plot(t, linear_traj_DMP[:, 0], color="g", linestyle="-.", label='DMP_h(x)')
     ax2.plot(t, scaled_DMP_n003[:, 1], color="g", linestyle="-", alpha=0.5, label='DMP')
     
-    
     plt.savefig('visualize_IL_real_data.png', dpi=300)
     plt.show()
 
+if __name__ == '__main__':
+    ################################ test with real data ############################
+    traj_files = ["./path_point_for_ILRRL1.csv"]
+
+    trajs = np.array([np.loadtxt(f, delimiter=',') for f in traj_files])
+    ic(trajs.shape)
+
+    trajs2 = trajs[:, :98, :]
+    ic(trajs2.shape)
+
+    ######### via-point #########
+    # via-point extraction and task-centric
+    via_t = [0, 23, trajs2[0, :, 1].shape[0]-1]
+    off_set = [trajs[:, via_t[1], 1:4] - trajs[:, via_t[2], 7:10], 
+               trajs[:, via_t[2], 1:4] - trajs[:, via_t[2], 7:10]]
+
+    # training
+    vmp_set = []
+    linear_traj_raw = trajs[:, 0, 1:4]
+    for i in range(len(via_t)-1):
+        vmp = VMP(3, kernel_num=int(0.5*via_t[i+1]), elementary_type='linear', use_out_of_range_kernel=False)
+        temp_linear_traj_raw = vmp.train(trajs2[:, via_t[i]:via_t[i+1], 0:4])
+        vmp_set.append(vmp)
+        linear_traj_raw = np.concatenate((linear_traj_raw, temp_linear_traj_raw), axis=0)
 
 
+    ########################### test 1 ###########################
+    # scale to variable position [0.03, 0.03, 0]
+    # via_point modulation
+    offset1 = np.array([0.03, 0.03, 0])
+    scale_and_reproduce(trajs, vmp_set, via_t, off_set, offset1)
+
+
+    ########################### test 2 ###########################
+    # scale to variable position [-0.03, -0.03, 0]
+    # via_point modulation
+    offset1 = np.array([-0.03, -0.03, 0])
+    scale_and_reproduce(trajs, vmp_set, via_t, off_set, offset1)
+
+    ic(reproduced.shape)
+    
+    draw(linear_traj, trajs, trajs2)

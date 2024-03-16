@@ -83,12 +83,11 @@ def differential(data):
 
 def via_point(data):
     raw_v = differential(data[:, 1:4])
-
     v_avg = moving_average(raw_v, 4)
-
+    
     raw_a = differential(v_avg)
-
     via_index = np.argmax(raw_a)
+    
     print(via_index, 
           np.linalg.norm(data[via_index, 1:4]-data[-1, 1:4]), 
           [data[0, 1:7], data[via_index, 1:7], data[-1, 1:7]])
