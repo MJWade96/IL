@@ -5,7 +5,6 @@ import csv
 import pandas as pd
 import matplotlib.pyplot as plt
 
-#import seaborn as sns; sns.set()
 def path_reading(dir):
     data = pd.read_csv(dir)
     print(np.array(data))
