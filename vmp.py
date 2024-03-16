@@ -223,7 +223,6 @@ if __name__ == '__main__':
 
 
     ################################ test with real data ############################
-    #from robot_utils.py.visualize import set_3d_equal_auto
     traj_files = ["./path_point_for_ILRRL1.csv"]
 
 
@@ -299,23 +298,18 @@ if __name__ == '__main__':
     ax1.set_xlabel("x")
     ax1.set_ylabel("y")
     ax1.set_zlabel("z")
-    #set_3d_equal_auto(ax)
     ax1.legend(ncol=2, loc="upper right")
-    #ic(trajs[0, :, :], reproduced[:, :])
 
 
     t = np.linspace(0, 1, trajs2[0, :, 1].shape[0])
 
     ax2.plot(t, trajs2[0, :, 1], color="b", linestyle="-", label='Demonstration')
-    #ax2.plot(t, linear_traj_raw[:, 0], color="b", linestyle="-.")
 
     ax2.plot(t, linear_traj[:, 0], color="r", linestyle="-.", label='VMP_h(x)')
     ax2.plot(t, scaled_VMP_n003[:, 1], color="r", linestyle="-", alpha=0.5, label='VMP')
 
     ax2.plot(t, linear_traj_DMP[:, 0], color="g", linestyle="-.", label='DMP_h(x)')
     ax2.plot(t, scaled_DMP_n003[:, 1], color="g", linestyle="-", alpha=0.5, label='DMP')
-    #ax2.set_xlabel("t")
-    #ax2.set_ylabel("x")
     ax2.legend(ncol=1, loc="upper right")
     
     plt.savefig('visualize_IL_real_data.png', dpi=300)

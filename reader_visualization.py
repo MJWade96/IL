@@ -1,19 +1,15 @@
 import rospy
 
 import numpy as np
-import csv
 import pandas as pd
 import matplotlib.pyplot as plt
+
+import csv
 
 def path_reading(dir):
     data = pd.read_csv(dir)
     print(np.array(data))
-    '''
-    newfile = open('/home/wang/catkin_ws/src/wxm_assembly/wxm_robot_teleop/scripts/path_point.csv','r')
-    filereader = csv.reader(newfile)
-    for rows in filereader:
-        print(rows)
-    '''
+    
     return np.array(data)
 
 
