@@ -1,4 +1,3 @@
-#!/home/wangchuang/anaconda3/envs/pytorchgpupy3.7/bin/python
 from typing import Union
 
 import matplotlib.pyplot as plt
@@ -32,7 +31,7 @@ class VMP:
         """
         compute the contribution of each kernel given a canonical value
         """
-        #ic(can_value - self.centers)
+        
         return np.exp(np.square(can_value - self.centers) * self.var_reci)
 
     def __Psi__(self, can_values: np.ndarray):
@@ -58,7 +57,7 @@ class VMP:
         else:
             can_values_aug = np.stack([np.ones(can_values.shape[0]), can_values, np.power(can_values, 2),
                                        np.power(can_values, 3), np.power(can_values, 4), np.power(can_values, 5)])
-        #ic(self.h_params, can_values_aug)
+            
         return np.einsum("ij,ik->kj", self.h_params, can_values_aug)  # (n, 2) (T, 2)
 
     def train(self, trajectories):
@@ -150,42 +149,6 @@ class VMP:
         self.g = g
         self.h_params = np.stack([self.g, self.y0 - self.g])
 
-    # def set_start_goal(self, y0, g, dy0=None, dg=None, ddy0=None, ddg=None):
-    #     self.y0 = y0
-    #     self.g = g
-    #     self.q0 = y0
-    #     self.q1 = g
-    #
-    #     self.goal = g
-    #     self.start = y0
-    #
-    #
-    #     if self.ElementaryType == "minjerk":
-    #         zerovec = np.zeros(shape=np.shape(self.y0))
-    #         if dy0 is not None and np.shape(dy0)[0] == np.shape(self.y0)[0]:
-    #             dy0 = dy0
-    #         else:
-    #             dy0 = zerovec
-    #
-    #         if ddy0 is not None and np.shape(ddy0)[0] == np.shape(self.y0)[0]:
-    #             ddy0 = ddy0
-    #         else:
-    #             ddy0 = zerovec
-    #
-    #         if dg is not None and np.shape(dg)[0] == np.shape(self.y0)[0]:
-    #             dg = dg
-    #         else:
-    #             dg = zerovec
-    #
-    #         if ddg is not None and np.shape(ddg)[0] == np.shape(self.y0)[0]:
-    #             ddg = ddg
-    #         else:
-    #             ddg = zerovec
-    #
-    #         self.h_params = self.get_min_jerk_params(self.y0 , self.g, dy0=dy0, dg=dg, ddy0=ddy0, ddg=ddg)
-    #     else:
-    #         self.h_params = np.transpose(np.stack([self.g, self.y0 - self.g]))
-
     def roll(self, y0, g, n_samples=None):
         """
         reproduce the trajectory given start point y0 (dim, ) and end point g (dim, ), return traj (n_samples, dim)
@@ -269,17 +232,6 @@ if __name__ == '__main__':
 
     trajs2 = trajs[:, :98, :]
     ic(trajs2.shape)
-
-    # preprocess for task-centric
-    #trajs2 = np.concatenate([np.expand_dims(trajs[:, :90, 0], 2), trajs[:, :90, 1:4] - trajs[:, :90, 7:10]], axis=2)
-    #ic(trajs2[:, 0, 1:7])
-    '''
-    transformation_matrix_robot_to_object = np.linalg.inv(transformation_matrix(trajs[0, 0, 7:10], trajs[0, 0, 10:13])) #position_object, euler_angles_object
-    transformation_matrix_ee_to_robot = transformation_matrix(trajs[0, 0, 1:4], trajs[0, 0, 4:7])
-    pose_object = np.dot(transformation_matrix_robot_to_object, transformation_matrix_ee_to_robot)
-    ic(pose_object) #pose_object[:, 0, 1:7]
-    '''
-
 
     #########via-point#########
     # via-point extraction and task-centric
@@ -365,31 +317,7 @@ if __name__ == '__main__':
     #ax2.set_xlabel("t")
     #ax2.set_ylabel("x")
     ax2.legend(ncol=1, loc="upper right")
-    '''
-    plt.plot(t, trajs2[0, :, 1], color="r", linestyle="--")
-    #plt.plot(t, trajs2[0, :, 2], color="g", linestyle="--")
-    #plt.plot(t, trajs2[0, :, 3], color="b", linestyle="--")
     
-    #plt.plot(t, linear_traj_raw[:, 0], color="r", linestyle="-.")
-    #plt.plot(t, linear_traj_raw[:, 1], color="g", linestyle="-.")
-    #plt.plot(t, linear_traj_raw[:, 2], color="b", linestyle="-.")
-
-    plt.plot(t, linear_traj[:, 0], color="r", linestyle="-.")
-    #plt.plot(t, linear_traj[:, 1], color="g", linestyle="-.")
-    #plt.plot(t, linear_traj[:, 2], color="b", linestyle="-.")
-
-    plt.plot(t, scaled_VMP_n003[:, 1], color="r", linestyle="-", alpha=0.5)
-    #plt.plot(t, scaled_VMP_n003[:, 2], color="g", linestyle="-", alpha=0.5)
-    #plt.plot(t, scaled_VMP_n003[:, 3], color="b", linestyle="-", alpha=0.5)
-
-    plt.plot(t, scaled_DMP_n003[:, 1], color="r", linestyle="-", alpha=0.5)
-    #plt.plot(t, scaled_DMP_n003[:, 2], color="g", linestyle="-", alpha=0.5)
-    #plt.plot(t, scaled_DMP_n003[:, 3], color="b", linestyle="-", alpha=0.5)
-    
-    ax2 = fig.add_subplot(133)
-    plt.plot(t, trajs2[0, :, 3] - linear_traj_raw[:, 2], color="r", linestyle="-.")
-    plt.plot(reproduced[:, 0], reproduced[:, 3] - linear_traj[:, 2], color="r", linestyle="-", alpha=0.5)
-    '''
     plt.savefig('visualize_IL_real_data.png', dpi=300)
     plt.show()
 
