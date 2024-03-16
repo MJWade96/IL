@@ -1,5 +1,3 @@
-#!/home/wangchuang/anaconda3/envs/pytorchgpupy3.7/bin/python
-
 import rospy
 
 import numpy as np
@@ -22,26 +20,21 @@ def path_reading(dir):
 
 def data_plot(data):
     fig = plt.figure(num=1, dpi=300)
-    #sns.set_style("white")
     ax1 = fig.add_subplot(3, 1, 1)
     ax2 = fig.add_subplot(3, 1, 2)
     ax3 = fig.add_subplot(3, 1, 3)
-    #ax4 = fig.add_subplot(4, 2, 4)
 
-    #plt.tight_layout()
     plt.subplots_adjust(hspace=0.3)
 
     ax1.cla()
     ax2.cla()
     ax3.cla()
-    #ax4.cla()
 
     t = range(0, len(data))
 
     ax1.plot(t, data[:, 1], label='tool_x')
     ax1.plot(t, data[:, 2], label='tool_y')
     ax1.plot(t, data[:, 3], label='tool_z')
-    #ax1.set_title('position')
     ax1.set_xlabel('s')
     ax1.set_ylabel('Position(m)')
     ax1.legend(ncol=3,loc="upper right")
@@ -51,31 +44,14 @@ def data_plot(data):
     print(np.size(v))
     t = range(0, np.size(v))
     ax2.plot(t, v, label='velocity')
-    #ax2.set_title('velocity')
     ax2.set_xlabel('s')
     ax2.set_ylabel('Velocity')
-    #ax2.legend()
     print(np.size(a))
     t = range(0, np.size(a))
     ax3.plot(t, a, label='velocity')
-    # ax2.set_title('velocity')
     ax3.set_xlabel('s')
     ax3.set_ylabel('Acceleration')
-    #ax3.legend()
-    '''ax2.plot(t, data[:, 19], label='speed_x')
-    ax2.plot(t, data[:, 20], label='speed_y')
-    ax2.plot(t, data[:, 21], label='speed_z')
-    ax2.set_title('velocity')
-    ax2.set_xlabel('time')
-    ax2.set_ylabel('meter')
-    ax2.legend()
-    ax3.plot(t, data[:, 13], label='wrench_x')
-    ax3.plot(t, data[:, 14], label='wrench_y')
-    ax3.plot(t, data[:, 15], label='wrench_z')
-    ax3.set_title('wrench')
-    ax3.set_xlabel('time')
-    ax3.set_ylabel('force')
-    ax3.legend()'''
+
     plt.savefig('visualize_demonstration.pdf', dpi=300)
     plt.show()
 
@@ -91,7 +67,6 @@ def exponential_moving_average(raw_v):
         v_t = beta * v_pre + (1 - beta) * t
         v_ema.append(v_t)
         v_pre = v_t
-    #print("v_mea:", v_ema)
 
     v_ema_corr = []
     for i, t in enumerate(v_ema):
@@ -122,7 +97,6 @@ def via_point(data):
 def main():
     try:
         data = path_reading("./path_point_for_ILRRL8-peg.csv")
-        #via_point(data)
         data_plot(data)
     except KeyboardInterrupt:
         
