@@ -1,11 +1,11 @@
 from typing import Union
 
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+
 from icecream import ic
 
 pinv_rcond = 1.4e-08
-
 
 class VMP:
     def __init__(self, dim, kernel_num=30, kernel_std=0.1, elementary_type='linear', use_out_of_range_kernel=True):
@@ -27,12 +27,14 @@ class VMP:
         self.y0 = None
         self.g = None
 
+
     def __psi__(self, can_value: Union[float, np.ndarray]):
         """
         compute the contribution of each kernel given a canonical value
         """
         
         return np.exp(np.square(can_value - self.centers) * self.var_reci)
+
 
     def __Psi__(self, can_values: np.ndarray):
         """
@@ -41,12 +43,14 @@ class VMP:
         """
         return self.__psi__(can_values[:, None])
 
+
     def h(self, x):
         if self.elementary_type == 'linear':
             return np.matmul(self.h_params, np.matrix([[1], [x]]))
         else:
             return np.matmul(self.h_params, np.matrix(
                 [[1], [x], [np.power(x, 2)], [np.power(x, 3)], [np.power(x, 4)], [np.power(x, 5)]]))
+
 
     def linear_traj(self, can_values: np.ndarray):
         """
@@ -55,8 +59,9 @@ class VMP:
         if self.elementary_type == 'linear':
             can_values_aug = np.stack([np.ones(can_values.shape[0]), can_values])
         else:
-            can_values_aug = np.stack([np.ones(can_values.shape[0]), can_values, np.power(can_values, 2),
-                                       np.power(can_values, 3), np.power(can_values, 4), np.power(can_values, 5)])
+            can_values_aug = np.stack([np.ones(can_values.shape[0]), can_values, 
+                                       np.power(can_values, 2), np.power(can_values, 3), 
+                                       np.power(can_values, 4), np.power(can_values, 5)])
             
         return np.einsum("ij,ik->kj", self.h_params, can_values_aug)  # (n, 2) (T, 2)
 
@@ -77,21 +82,22 @@ class VMP:
             y0 = trajectories[:, 0, 1:].mean(axis=0)
             g = trajectories[:, -1, 1:].mean(axis=0)
             self.h_params = np.stack([g, y0-g])
-
         else:
             # min_jerk
             y0 = trajectories[:, 0:3, 1:].mean(axis=0)
-            g = trajectories[:, -2:, 1:].mean(axis=0)
             dy0 = (y0[1, 2:] - y0[0, 2:]) / (y0[1, 1] - y0[0, 1])
             dy1 = (y0[2, 2:] - y0[1, 2:]) / (y0[2, 1] - y0[1, 1])
             ddy0 = (dy1 - dy0) / (y0[1, 1] - y0[0, 1])
+            
+            g = trajectories[:, -2:, 1:].mean(axis=0)
             dg0 = (g[1, 2:] - g[0, 2:]) / (g[1, 1] - g[0, 1])
             dg1 = (g[2, 2:] - g[1, 2:]) / (g[2, 1] - g[1, 1])
             ddg = (dg1 - dg0) / (g[1, 1] - g[0, 1])
 
-            b = np.stack([y0[0, :], dy0, ddy0, g[-1, :], dg1, ddg])
-            A = np.array([[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], [1, 0, 0, 0, 0, 0],
-                          [0, 1, 0, 0, 0, 0], [0, 0, 2, 0, 0, 0]])
+            b = np.stack([y0[0, :], dy0, ddy0, 
+                          g[-1, :], dg1, ddg])
+            A = np.array([[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], 
+                          [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 2, 0, 0, 0]])
             self.h_params = np.linalg.solve(A, b)
 
         self.y0 = y0
@@ -102,19 +108,25 @@ class VMP:
         pseudo_inv = np.linalg.pinv(Psi.T.dot(Psi), pinv_rcond)  # (K, K)
         self.kernel_weights = np.einsum("ij,njd->nid", pseudo_inv.dot(Psi.T), shape_traj).mean(axis=0)  #
         ic(Psi.shape, shape_traj.shape, self.kernel_weights.shape)
+        
         return linear_traj
+
 
     def save_weights_to_file(self, filename):
         np.savetxt(filename, self.kernel_weights, delimiter=',')
 
+
     def load_weights_from_file(self, filename):
         self.kernel_weights = np.loadtxt(filename, delimiter=',')
+
 
     def get_weights(self):
         return self.kernel_weights
 
+
     def get_flatten_weights(self):
         return self.kernel_weights.flatten('F')
+
 
     def set_weights(self, ws: np.ndarray):
         """
@@ -132,22 +144,27 @@ class VMP:
                             f"It should have {self.kernel_num} rows (for kernel number) "
                             f"and {self.dim} columns (for dimensions), but given is {ws.shape}.")
 
+
     def get_position(self, t):
         x = 1 - t
         return np.matmul(self.__psi__(x), self.kernel_weights)
+
 
     def set_start(self, y0):
         self.y0 = y0
         self.h_params = np.stack([self.g, self.y0 - self.g])
 
+
     def set_goal(self, g):
         self.g = g
         self.h_params = np.stack([self.g, self.y0 - self.g])
+
 
     def set_start_goal(self, y0, g):
         self.y0 = y0
         self.g = g
         self.h_params = np.stack([self.g, self.y0 - self.g])
+
 
     def roll(self, y0, g, n_samples=None):
         """
@@ -169,11 +186,14 @@ class VMP:
         traj = linear_traj + np.einsum("ij,jk->ik", psi, self.kernel_weights)
 
         time_stamp = 1 - np.expand_dims(can_values, 1)
+        
         return np.concatenate([time_stamp, traj], axis=1), linear_traj
+
 
     def get_target(self, t):
         action = np.transpose(self.h(1-t)) + self.get_position(t)
         return action
+
 
     @staticmethod
     def can_sys(t0, t1, n_sample):
@@ -187,12 +207,15 @@ class VMP:
         """
         return np.linspace(t0, t1, n_sample)
 
+
     @staticmethod
     def get_min_jerk_params(y0, g, dy0, dg, ddy0, ddg):
-        b = np.stack([y0, dy0, ddy0, g, dg, ddg])
+        b = np.stack([y0, dy0, ddy0, 
+                      g, dg, ddg])
         A = np.array(
-            [[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0],
-             [0, 0, 2, 0, 0, 0]])
+            [[1, 1, 1, 1, 1, 1], [0, 1, 2, 3, 4, 5], [0, 0, 2, 6, 12, 20], 
+             [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 2, 0, 0, 0]]
+            )
 
         return np.linalg.solve(A, b)
 
@@ -207,8 +230,8 @@ def transformation_matrix(position, euler_angles):
     roll, pitch, yaw = euler_angles
     rotation_matrix = np.eye(4)
     rotation_matrix[:3, :3] = np.array([
-        [np.cos(yaw)*np.cos(pitch), -np.sin(yaw)*np.cos(roll)+np.cos(yaw)*np.sin(pitch)*np.sin(roll), np.sin(yaw)*np.sin(roll)+np.cos(yaw)*np.sin(pitch)*np.cos(roll)],
-        [np.sin(yaw)*np.cos(pitch), np.cos(yaw)*np.cos(roll)+np.sin(yaw)*np.sin(pitch)*np.sin(roll), -np.cos(yaw)*np.sin(roll)+np.sin(yaw)*np.sin(pitch)*np.cos(roll)],
+        [np.cos(yaw)*np.cos(pitch), -np.sin(yaw)*np.cos(roll) + np.cos(yaw)*np.sin(pitch)*np.sin(roll), np.sin(yaw)*np.sin(roll) + np.cos(yaw)*np.sin(pitch)*np.cos(roll)],
+        [np.sin(yaw)*np.cos(pitch), np.cos(yaw)*np.cos(roll) + np.sin(yaw)*np.sin(pitch)*np.sin(roll), -np.cos(yaw)*np.sin(roll) + np.sin(yaw)*np.sin(pitch)*np.cos(roll)],
         [-np.sin(pitch), np.cos(pitch)*np.sin(roll), np.cos(pitch)*np.cos(roll)]
     ])
 
@@ -217,14 +240,9 @@ def transformation_matrix(position, euler_angles):
     return transformation_matrix
 
 
-
 if __name__ == '__main__':
-    
-
-
     ################################ test with real data ############################
     traj_files = ["./path_point_for_ILRRL1.csv"]
-
 
     trajs = np.array([np.loadtxt(f, delimiter=',') for f in traj_files])
     ic(trajs.shape)
@@ -232,7 +250,7 @@ if __name__ == '__main__':
     trajs2 = trajs[:, :98, :]
     ic(trajs2.shape)
 
-    #########via-point#########
+    ######### via-point #########
     # via-point extraction and task-centric
     via_t = [0, 23, trajs2[0, :, 1].shape[0]-1]
     off_set = [trajs[:, via_t[1], 1:4] - trajs[:, via_t[2], 7:10], trajs[:, via_t[2], 1:4] - trajs[:, via_t[2], 7:10]]
@@ -246,6 +264,8 @@ if __name__ == '__main__':
         vmp_set.append(vmp)
         linear_traj_raw = np.concatenate((linear_traj_raw, temp_linear_traj_raw), axis=0)
 
+
+    ########################### test 1 ###########################
     # scale to variable position [0.03, 0.03, 0]
     # via_point modulation
     start = trajs[:, 0, 1:4][0]
@@ -266,6 +286,8 @@ if __name__ == '__main__':
         scaled_VMP_p003 = np.concatenate((scaled_VMP_p003, temp_reproduced), axis=0)
         linear_traj = np.concatenate((linear_traj, temp_linear_traj), axis=0)
 
+
+    ########################### test 2 ###########################
     # scale to variable position [-0.03, -0.03, 0]
     # via_point modulation
     start = trajs[:, 0, 1:4][0]
@@ -286,31 +308,33 @@ if __name__ == '__main__':
         linear_traj = np.concatenate((linear_traj, temp_linear_traj), axis=0)
 
     ic(reproduced.shape)
+    
     fig = plt.figure(dpi=300)
-    ax1 = fig.add_subplot(121, projection='3d')
-    ax2 = fig.add_subplot(122)
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.6)
-
-    ax1.plot(trajs[0, :, 1], trajs[0, :, 2], trajs[0, :, 3], color='blue', label='Demonstration')
-    ax1.plot(scaled_VMP_p003[:, 1], scaled_VMP_p003[:, 2], scaled_VMP_p003[:, 3], color="red", label='VMP')
-    ax1.plot(scaled_VMP_n003[:, 1], scaled_VMP_n003[:, 2], scaled_VMP_n003[:, 3], color="red")
+    
+    ax1 = fig.add_subplot(121, projection='3d')
+    ax2 = fig.add_subplot(122)
+    
     ax1.set_xlabel("x")
     ax1.set_ylabel("y")
     ax1.set_zlabel("z")
     ax1.legend(ncol=2, loc="upper right")
-
+    ax1.plot(trajs[0, :, 1], trajs[0, :, 2], trajs[0, :, 3], color='blue', label='Demonstration')
+    ax1.plot(scaled_VMP_p003[:, 1], scaled_VMP_p003[:, 2], scaled_VMP_p003[:, 3], color="red", label='VMP')
+    ax1.plot(scaled_VMP_n003[:, 1], scaled_VMP_n003[:, 2], scaled_VMP_n003[:, 3], color="red")
 
     t = np.linspace(0, 1, trajs2[0, :, 1].shape[0])
 
+    ax2.legend(ncol=1, loc="upper right")
+    
     ax2.plot(t, trajs2[0, :, 1], color="b", linestyle="-", label='Demonstration')
-
     ax2.plot(t, linear_traj[:, 0], color="r", linestyle="-.", label='VMP_h(x)')
     ax2.plot(t, scaled_VMP_n003[:, 1], color="r", linestyle="-", alpha=0.5, label='VMP')
 
     ax2.plot(t, linear_traj_DMP[:, 0], color="g", linestyle="-.", label='DMP_h(x)')
     ax2.plot(t, scaled_DMP_n003[:, 1], color="g", linestyle="-", alpha=0.5, label='DMP')
-    ax2.legend(ncol=1, loc="upper right")
+    
     
     plt.savefig('visualize_IL_real_data.png', dpi=300)
     plt.show()
