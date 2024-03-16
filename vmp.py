@@ -349,7 +349,7 @@ if __name__ == '__main__':
     ax1.set_zlabel("z")
     #set_3d_equal_auto(ax)
     ax1.legend(ncol=2, loc="upper right")
-    # ic(trajs[0, :, :], reproduced[:, :])
+    #ic(trajs[0, :, :], reproduced[:, :])
 
 
     t = np.linspace(0, 1, trajs2[0, :, 1].shape[0])
