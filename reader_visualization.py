@@ -4,7 +4,50 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import csv
+def via_point(data):
+    raw_v = differential(data[:, 1:4])
+    v_avg = moving_average(raw_v, 4)
+    
+    raw_a = differential(v_avg)
+    via_index = np.argmax(raw_a)
+    
+    print(via_index, 
+          np.linalg.norm(data[via_index, 1:4]-data[-1, 1:4]), 
+          [data[0, 1:7], data[via_index, 1:7], data[-1, 1:7]])
+
+    return v_avg, raw_a, via_index
+
+
+def moving_average(raw_v, w):
+    return np.convolve(raw_v, np.ones(w), "valid") / w
+
+
+def exponential_moving_average(raw_v):
+    v_ema = []
+    v_pre = 0
+    beta = 0.9
+    for i, t in enumerate(raw_v):
+        v_t = beta * v_pre + (1 - beta) * t
+        v_ema.append(v_t)
+        v_pre = v_t
+
+    v_ema_corr = []
+    for i, t in enumerate(v_ema):
+        v_ema_corr.append(t / (1 - np.power(beta, i+1)))
+
+    return v_ema_corr
+
+
+def differential(data):
+    raw_v = []
+    
+    for i in range(0, len(data)-1):
+        tem_v = np.linalg.norm(data[i+1] - data[i])
+        raw_v.append(tem_v)
+        
+    return(raw_v)
+
+
 
 def path_reading(dir):
     data = pd.read_csv(dir)
@@ -50,50 +93,6 @@ def data_plot(data):
     plt.savefig('visualize_demonstration.pdf', dpi=300)
     plt.show()
     
-
-def moving_average(raw_v, w):
-    return np.convolve(raw_v, np.ones(w), "valid") / w
-
-
-def exponential_moving_average(raw_v):
-    v_ema = []
-    v_pre = 0
-    beta = 0.9
-    for i, t in enumerate(raw_v):
-        v_t = beta * v_pre + (1 - beta) * t
-        v_ema.append(v_t)
-        v_pre = v_t
-
-    v_ema_corr = []
-    for i, t in enumerate(v_ema):
-        v_ema_corr.append(t / (1 - np.power(beta, i+1)))
-
-    return v_ema_corr
-
-
-def differential(data):
-    raw_v = []
-    
-    for i in range(0, len(data)-1):
-        tem_v = np.linalg.norm(data[i+1] - data[i])
-        raw_v.append(tem_v)
-        
-    return(raw_v)
-
-
-def via_point(data):
-    raw_v = differential(data[:, 1:4])
-    v_avg = moving_average(raw_v, 4)
-    
-    raw_a = differential(v_avg)
-    via_index = np.argmax(raw_a)
-    
-    print(via_index, 
-          np.linalg.norm(data[via_index, 1:4]-data[-1, 1:4]), 
-          [data[0, 1:7], data[via_index, 1:7], data[-1, 1:7]])
-
-    return v_avg, raw_a, via_index
-
 
 def main():
     try:
